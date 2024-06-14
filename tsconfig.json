@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "lib": ["es2023"],
+    "module": "CommonJS",
+    "target": "es2022",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "moduleResolution": "Node",
+    "outDir": "./dist"
+  },
+  "include": ["src/**/*"]
+}
