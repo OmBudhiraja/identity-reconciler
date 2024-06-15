@@ -3,8 +3,7 @@ import {
   mysqlEnum,
   mysqlTable,
   varchar,
-  serial,
-  datetime,
+  timestamp,
   unique,
   type AnyMySqlColumn,
 } from 'drizzle-orm/mysql-core';
@@ -15,11 +14,11 @@ export const contacts = mysqlTable(
     id: int('id').autoincrement().primaryKey(),
     phoneNumber: varchar('phone_number', { length: 25 }),
     email: varchar('email', { length: 256 }),
-    linkPrecedence: mysqlEnum('link_precedence', ['primary', 'secondary']),
+    linkPrecedence: mysqlEnum('link_precedence', ['primary', 'secondary']).notNull(),
     linkedId: int('linked_id').references((): AnyMySqlColumn => contacts.id),
-    createdAt: datetime('created_at').notNull().default(new Date()),
-    updatedAt: datetime('updated_at').notNull().default(new Date()),
-    deletedAt: datetime('deleted_at'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+    deletedAt: timestamp('deleted_at'),
   },
   (contacts) => {
     return {
@@ -29,4 +28,5 @@ export const contacts = mysqlTable(
 );
 
 export type Contact = typeof contacts.$inferSelect;
+export type NewContact = typeof contacts.$inferInsert;
 // export {}
