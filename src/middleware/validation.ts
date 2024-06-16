@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { type Request, type Response, type NextFunction } from 'express';
 
 const identifyBodySchema = z.object({
-  email: z.string().optional(),
+  email: z.string().email().optional(),
   phoneNumber: z.number().optional(),
 });
 

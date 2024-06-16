@@ -1,9 +1,13 @@
 import { type Request, type Response } from 'express';
-import { type SQL, eq, inArray, or } from 'drizzle-orm';
-import { alias } from 'drizzle-orm/mysql-core';
-import { type DB } from '../db/connect';
-import { type Contact, contacts as contactsTable, type NewContact } from '../db/schema';
+
+import { type Contact, type NewContact } from '../db/schema';
 import { type IdentifyBody } from '../middleware/validation';
+import {
+  createContact,
+  getContactsWithEmailOrPhone,
+  getContactWithLinkedId,
+  updateContactWithLinkedId,
+} from '../services/contactService';
 
 async function identifyHandler(req: Request, res: Response) {
   const body = req.parsedBody as IdentifyBody;
@@ -88,11 +92,15 @@ async function identifyHandler(req: Request, res: Response) {
       });
     }
 
-    await updateContact(req.db, primaryContactIdsToUpdate.concat(secondaryContactIdsToUpdate), {
-      linkPrecedence: 'secondary',
-      linkedId: primaryContact.id,
-      updatedAt: new Date(),
-    });
+    await updateContactWithLinkedId(
+      req.db,
+      primaryContactIdsToUpdate.concat(secondaryContactIdsToUpdate),
+      {
+        linkPrecedence: 'secondary',
+        linkedId: primaryContact.id,
+        updatedAt: new Date(),
+      }
+    );
   } else {
     primaryContact = primaryContacts[0];
   }
@@ -153,64 +161,6 @@ function marshalResponse(
       phoneNumbers: uniquePhoneNumbers,
     },
   });
-}
-
-async function getContactsWithEmailOrPhone(db: DB, parsedBody: IdentifyBody) {
-  const { email, phoneNumber } = parsedBody;
-
-  const filters: SQL[] = [];
-
-  if (email !== undefined) {
-    filters.push(eq(contactsTable.email, email));
-  }
-
-  if (phoneNumber !== undefined) {
-    filters.push(eq(contactsTable.phoneNumber, phoneNumber.toString()));
-  }
-
-  const linkedContact = alias(contactsTable, 'linkedContact');
-
-  return db
-    .select({
-      id: contactsTable.id,
-      phoneNumber: contactsTable.phoneNumber,
-      email: contactsTable.email,
-      linkPrecedence: contactsTable.linkPrecedence,
-      linkedId: contactsTable.linkedId,
-      createdAt: contactsTable.createdAt,
-      linkedContact: {
-        id: linkedContact.id,
-        email: linkedContact.email,
-        phoneNumber: linkedContact.phoneNumber,
-        linkPrecedence: linkedContact.linkPrecedence,
-        linkedId: linkedContact.linkedId,
-        createdAt: linkedContact.createdAt,
-      },
-    })
-    .from(contactsTable)
-    .where(or(...filters))
-    .leftJoin(linkedContact, eq(contactsTable.linkedId, linkedContact.id));
-}
-
-async function getContactWithLinkedId(db: DB, linkedIds: number[]) {
-  return db
-    .select({
-      id: contactsTable.id,
-      phoneNumber: contactsTable.phoneNumber,
-      email: contactsTable.email,
-      linkPrecedence: contactsTable.linkPrecedence,
-      linkedId: contactsTable.linkedId,
-    })
-    .from(contactsTable)
-    .where(inArray(contactsTable.linkedId, linkedIds));
-}
-
-async function createContact(db: DB, body: NewContact) {
-  return db.insert(contactsTable).values(body);
-}
-
-async function updateContact(db: DB, ids: number[], data: NewContact) {
-  return db.update(contactsTable).set(data).where(inArray(contactsTable.id, ids));
 }
 
 export default identifyHandler;
