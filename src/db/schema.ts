@@ -15,7 +15,9 @@ export const contacts = mysqlTable(
     phoneNumber: varchar('phone_number', { length: 25 }),
     email: varchar('email', { length: 256 }),
     linkPrecedence: mysqlEnum('link_precedence', ['primary', 'secondary']).notNull(),
-    linkedId: int('linked_id').references((): AnyMySqlColumn => contacts.id),
+    linkedId: int('linked_id').references((): AnyMySqlColumn => contacts.id, {
+      onDelete: 'cascade',
+    }),
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
     deletedAt: timestamp('deleted_at'),
