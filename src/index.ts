@@ -22,7 +22,7 @@ async function main() {
 
   app.get('/', async (req, res) => {
     res.json({
-      message: 'Hello World!',
+      message: 'Access the POST /identify endpoint to identify a contact',
     });
   });
 
