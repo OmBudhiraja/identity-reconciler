@@ -31,4 +31,3 @@ export const contacts = mysqlTable(
 
 export type Contact = typeof contacts.$inferSelect;
 export type NewContact = typeof contacts.$inferInsert;
-// export {}

@@ -33,6 +33,7 @@ async function identifyHandler(req: Request, res: Response) {
   }
 
   const primaryContacts: Partial<Contact>[] = [];
+  let primaryContact: Partial<Contact>;
 
   for (const contact of contacts) {
     if (contact.linkPrecedence === 'primary') {
@@ -49,6 +50,7 @@ async function identifyHandler(req: Request, res: Response) {
     }
   }
 
+  // this should never happen, since one of the primary contacts should be linked to the secondary contact
   if (primaryContacts.length === 0) {
     return res.status(500).json({
       message: 'Primary contact not found',
@@ -60,10 +62,39 @@ async function identifyHandler(req: Request, res: Response) {
     primaryContacts.map((c) => c.id!)
   );
 
-  // one primary contact should turn into secondary contact
+  // one primary contact should turn into secondary contact and its linkedId should be updated
   if (primaryContacts.length > 1) {
-    // TODO: handle this case by updating the linkPrecedence of one primary contact to secondary
-    // and also all the secondary contacts linkedId to the new primary contact
+    primaryContact = primaryContacts.sort(
+      (a, b) => (a.createdAt?.valueOf() ?? 0) - (b.createdAt?.valueOf() ?? 0)
+    )[0];
+
+    const primaryContactIdsToUpdate: number[] = [];
+    const secondaryContactIdsToUpdate: number[] = [];
+
+    for (const secondaryContact of secondaryContacts) {
+      if (secondaryContact.linkedId !== primaryContact.id) {
+        secondaryContactIdsToUpdate.push(secondaryContact.id!);
+      }
+    }
+
+    for (let i = 1; i < primaryContacts.length; i++) {
+      primaryContactIdsToUpdate.push(primaryContacts[i].id!);
+      secondaryContacts.push({
+        id: primaryContacts[i].id!,
+        email: primaryContacts[i].email ?? null,
+        phoneNumber: primaryContacts[i].phoneNumber ?? null,
+        linkPrecedence: 'secondary',
+        linkedId: primaryContact.id!,
+      });
+    }
+
+    await updateContact(req.db, primaryContactIdsToUpdate.concat(secondaryContactIdsToUpdate), {
+      linkPrecedence: 'secondary',
+      linkedId: primaryContact.id,
+      updatedAt: new Date(),
+    });
+  } else {
+    primaryContact = primaryContacts[0];
   }
 
   // if email or phone exists in any contact
@@ -86,7 +117,7 @@ async function identifyHandler(req: Request, res: Response) {
       email: email ?? null,
       phoneNumber: phoneNumber?.toString() ?? null,
       linkPrecedence: 'secondary',
-      linkedId: primaryContacts[0].id!,
+      linkedId: primaryContact.id,
     };
 
     const newSecondaryContact = await createContact(req.db, data);
@@ -96,7 +127,7 @@ async function identifyHandler(req: Request, res: Response) {
     secondaryContacts.push(data as Contact);
   }
 
-  marshalResponse(res, primaryContacts[0], secondaryContacts);
+  marshalResponse(res, primaryContact, secondaryContacts);
 }
 
 function marshalResponse(
@@ -176,6 +207,10 @@ async function getContactWithLinkedId(db: DB, linkedIds: number[]) {
 
 async function createContact(db: DB, body: NewContact) {
   return db.insert(contactsTable).values(body);
+}
+
+async function updateContact(db: DB, ids: number[], data: NewContact) {
+  return db.update(contactsTable).set(data).where(inArray(contactsTable.id, ids));
 }
 
 export default identifyHandler;
