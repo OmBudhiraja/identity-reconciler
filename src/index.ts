@@ -2,6 +2,7 @@ import express, { type Request, type Response } from 'express';
 import dotenv from 'dotenv';
 import connectDb from './db/connect';
 import indentifyHandler from './handlers/identify';
+import { validateIdentifyRequest } from './middleware/validation';
 
 dotenv.config();
 
@@ -25,7 +26,7 @@ async function main() {
     });
   });
 
-  app.post('/identify', indentifyHandler);
+  app.post('/identify', validateIdentifyRequest, indentifyHandler);
 
   app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);

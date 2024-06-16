@@ -1,37 +1,16 @@
 import { type Request, type Response } from 'express';
-import { z } from 'zod';
+import { type SQL, eq, inArray, or } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/mysql-core';
 import { type DB } from '../db/connect';
 import { type Contact, contacts as contactsTable, type NewContact } from '../db/schema';
-import { SQL, eq, inArray, or } from 'drizzle-orm';
-import { alias } from 'drizzle-orm/mysql-core';
-
-const identifyBodySchema = z.object({
-  email: z.string().optional(),
-  phoneNumber: z.number().optional(),
-});
-
-type IdentifyBody = z.infer<typeof identifyBodySchema>;
+import { type IdentifyBody } from '../middleware/validation';
 
 async function identifyHandler(req: Request, res: Response) {
-  const bodyParser = identifyBodySchema.safeParse(req.body);
-
-  if (!bodyParser.success) {
-    return res.status(400).json({
-      message: 'Invalid request body',
-      error: bodyParser.error.flatten(),
-    });
-  }
-
-  const { email, phoneNumber } = bodyParser.data;
-
-  if (!email && !phoneNumber) {
-    return res.status(400).json({
-      message: 'Missing required fields',
-    });
-  }
+  const body = req.parsedBody as IdentifyBody;
+  const { email, phoneNumber } = body;
 
   // get contacts where email or phone is same
-  const contacts = await getContactsWithEmailOrPhone(req.db, bodyParser.data);
+  const contacts = await getContactsWithEmailOrPhone(req.db, body);
 
   // create primary contact if no contacts found
   if (contacts.length === 0) {
@@ -76,7 +55,7 @@ async function identifyHandler(req: Request, res: Response) {
     });
   }
 
-  const secondaryContracts = await getContactWithLinkedId(
+  const secondaryContacts = await getContactWithLinkedId(
     req.db,
     primaryContacts.map((c) => c.id!)
   );
@@ -91,7 +70,7 @@ async function identifyHandler(req: Request, res: Response) {
   let emailFound = false;
   let phoneFound = false;
 
-  primaryContacts.concat(secondaryContracts).forEach((c) => {
+  primaryContacts.concat(secondaryContacts).forEach((c) => {
     if (email && c.email === email) {
       emailFound = true;
     }
@@ -103,24 +82,21 @@ async function identifyHandler(req: Request, res: Response) {
   // if email or phone was not null and not found in any contact
   // create a new secondary contact
   if ((!emailFound && email) || (!phoneFound && phoneNumber)) {
-    const newSecondaryContact = await createContact(req.db, {
-      email: email,
-      phoneNumber: phoneNumber?.toString() ?? null,
-      linkPrecedence: 'secondary',
-      linkedId: primaryContacts[0].id,
-    });
-
-    secondaryContracts.push({
-      id: newSecondaryContact[0].insertId,
+    const data: NewContact = {
       email: email ?? null,
       phoneNumber: phoneNumber?.toString() ?? null,
-      createdAt: new Date(),
       linkPrecedence: 'secondary',
       linkedId: primaryContacts[0].id!,
-    });
+    };
+
+    const newSecondaryContact = await createContact(req.db, data);
+
+    data.id = newSecondaryContact[0].insertId;
+
+    secondaryContacts.push(data as Contact);
   }
 
-  marshalResponse(res, primaryContacts[0], secondaryContracts);
+  marshalResponse(res, primaryContacts[0], secondaryContacts);
 }
 
 function marshalResponse(
@@ -193,7 +169,6 @@ async function getContactWithLinkedId(db: DB, linkedIds: number[]) {
       email: contactsTable.email,
       linkPrecedence: contactsTable.linkPrecedence,
       linkedId: contactsTable.linkedId,
-      createdAt: contactsTable.createdAt,
     })
     .from(contactsTable)
     .where(inArray(contactsTable.linkedId, linkedIds));
